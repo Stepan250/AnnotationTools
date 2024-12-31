@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Cropping Tool</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+
+        #canvas-container {
+            position: relative;
+            width: 80%;
+            height: 80%;
+            overflow: hidden;
+            background-color: #fff;
+            border: 2px solid #ccc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 30px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #canvas {
+            cursor: default; /* Изменен курсор на обычный */
+            border: 5px solid black; /* Черная граница вокруг изображения */
+        }
+
+        #controls {
+            width: 150px;
+            background-color: #f4f4f4;
+            padding: 10px;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #controls label {
+            background-color: #007bff;
+            color: white;
+            padding: 10px;
+            font-size: 16px;
+            text-align: center;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            width: 90%;
+            margin-bottom: 15px; /* Добавлено расстояние между кнопками */
+            margin-top: 15px;
+        }
+
+        #controls label:hover {
+            background-color: #0056b3;
+        }
+
+        #upload {
+            display: none;
+        }
+
+        #controls button {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="controls">
+        <label for="upload">Upload</label>
+        <input type="file" id="upload" accept="image/*">
+        <button id="upload-btn">Upload</button>
+        <label id="download">Download</label>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const upload = document.getElementById('upload');
+        const downloadLabel = document.getElementById('download');
+        const uploadBtn = document.getElementById('upload-btn');
+
+        let img = new Image();
+        let isDrawing = false;
+        let startX, startY, endX, endY;
+        let offsetX = 0, offsetY = 0; // Смещение изображения
+        let isDragging = false; // Флаг для отслеживания перемещения изображения
+
+        // Загрузка изображения на холст
+        upload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    img.src = reader.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        img.onload = () => {
+            // Устанавливаем размер холста, соответствующий размеру изображения
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // Рисуем изображение на холсте
+            drawImage();
+        };
+
+        function drawImage() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(offsetX, offsetY); // Применяем смещение
+            ctx.drawImage(img, 0, 0);
+            ctx.restore();
+        }
+
+        // Обработка обрезки
+        canvas.addEventListener('mousedown', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            if (event.button === 0) { // Левый клик для обрезки
+                isDrawing = true;
+                startX = (event.clientX - rect.left);
+                startY = (event.clientY - rect.top);
+            } else if (event.button === 2) { // Правая кнопка для перемещения
+                isDragging = true;
+                startX = event.clientX;
+                startY = event.clientY;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            if (isDrawing) {
+                endX = (event.clientX - rect.left);
+                endY = (event.clientY - rect.top);
+
+                drawImage();
+                ctx.strokeStyle = 'red';
+                ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+            } else if (isDragging) {
+                const dx = event.clientX - startX;
+                const dy = event.clientY - startY;
+
+                offsetX += dx;
+                offsetY += dy;
+
+                startX = event.clientX;
+                startY = event.clientY;
+
+                drawImage();
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+            isDragging = false;
+            canvas.style.cursor = 'default'; // Вернули обычный курсор
+        });
+
+        canvas.addEventListener('contextmenu', (event) => {
+            event.preventDefault(); // Отключение стандартного контекстного меню
+        });
+
+        // Сохранение обрезанного участка
+        downloadLabel.addEventListener('click', () => {
+            if (startX && startY && endX && endY) {
+                let cropWidth = endX - startX;
+                let cropHeight = endY - startY;
+
+                // Обеспечиваем, что ширина и высота всегда положительные
+                if (cropWidth < 0) {
+                    cropWidth = -cropWidth;
+                    startX = endX;
+                    endX = startX + cropWidth;
+                }
+                if (cropHeight < 0) {
+                    cropHeight = -cropHeight;
+                    startY = endY;
+                    endY = startY + cropHeight;
+                }
+
+                console.log('startX:', startX, 'startY:', startY, 'endX:', endX, 'endY:', endY);
+                console.log('cropWidth:', cropWidth, 'cropHeight:', cropHeight);
+
+                const cropCanvas = document.createElement('canvas');
+                cropCanvas.width = cropWidth;
+                cropCanvas.height = cropHeight;
+
+                const cropCtx = cropCanvas.getContext('2d');
+                cropCtx.drawImage(
+                    img,
+                    startX - offsetX, // Учёт смещения при вырезке
+                    startY - offsetY, // Учёт смещения при вырезке
+                    cropWidth,
+                    cropHeight,
+                    0,
+                    0,
+                    cropWidth,
+                    cropHeight
+                );
+
+                cropCanvas.toBlob((blob) => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `crop_${Date.now()}.jpg`;
+                    a.click();
+                }, 'image/jpeg');
+            } else {
+                alert('Please select an area to crop.');
+            }
+        });
+
+        // Загрузка изображения на сервер
+        uploadBtn.addEventListener('click', () => {
+            const fileInput = document.getElementById('upload');
+            const formData = new FormData();
+            formData.append('image', fileInput.files[0]);
+
+            fetch('http://localhost:3000/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.text())
+            .then(data => {
+                alert(data); // Показать ссылку на скачивание
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        });
+
+        // Обработчик нажатия клавиши "S"
+        document.addEventListener('keydown', (event) => {
+            if (event.key.toLowerCase() === 's') {
+                downloadLabel.click(); // Имитируем клик по кнопке "Download"
+            }
+        });
+    </script>
+</body>
+</html>
